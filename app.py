@@ -62,6 +62,25 @@ def set_avatar_from_bytes(user_id, image_bytes, content_type):
     except requests.exceptions.RequestException:
         pass
 
+def get_gallery_avatars():
+    avatars_dir = os.path.join("static", "avatars")
+    if not os.path.exists(avatars_dir):
+        return []
+    return sorted([
+        f for f in os.listdir(avatars_dir)
+        if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+    ])
+
+def set_avatar_from_gallery(user_id, avatar_filename):
+    avatar_path = os.path.join("static", "avatars", avatar_filename)
+    if not os.path.exists(avatar_path):
+        return
+    ext = avatar_filename.rsplit(".", 1)[-1].lower()
+    content_type = "image/png" if ext == "png" else "image/jpeg"
+    with open(avatar_path, "rb") as f:
+        image_bytes = f.read()
+    set_avatar_from_bytes(user_id, image_bytes, content_type)
+
 def import_user_to_jellyseerr(jellyfin_user_id):
     try:
         res = requests.post(
@@ -150,7 +169,8 @@ def invite_valid(token):
 def show_invite(token):
     if not invite_valid(token):
         return render_template("invite.html", error="Lien invalide, expiré ou déjà utilisé.")
-    return render_template("invite.html", token=token)
+    avatars = get_gallery_avatars()
+    return render_template("invite.html", token=token, avatars=avatars)
 
 @app.route("/invite/<token>", methods=["POST"])
 def process_invite(token):
@@ -160,6 +180,7 @@ def process_invite(token):
     username = request.form.get("username")
     password = request.form.get("password")
     email = request.form.get("email", "").strip()
+    selected_avatar = request.form.get("selected_avatar")
 
     res = requests.post(f"{JELLYFIN_URL}/Users/New", headers=jf_headers(),
                          json={"Name": username, "Password": password})
@@ -169,22 +190,23 @@ def process_invite(token):
         inv = invites[token]
         apply_policy(user_id, inv["account_expire_days"])
 
-        avatar_file = request.files.get("avatar")
-        if avatar_file and avatar_file.filename:
-            image_bytes = avatar_file.read()
-            content_type = avatar_file.content_type or "image/png"
-            set_avatar_from_bytes(user_id, image_bytes, content_type)
+        if selected_avatar:
+            set_avatar_from_gallery(user_id, selected_avatar)
 
+        print(f"[SEERR DEBUG] email={email!r} url={JELLYSEERR_URL!r} key_set={bool(JELLYSEERR_API_KEY)}")
         if email and JELLYSEERR_URL and JELLYSEERR_API_KEY:
             jellyseerr_id = import_user_to_jellyseerr(user_id)
+            print(f"[SEERR DEBUG] jellyseerr_id={jellyseerr_id}")
             if jellyseerr_id:
                 set_jellyseerr_email(jellyseerr_id, email)
+        else:
+            print("[SEERR SKIP] condition non remplie")
 
         inv["used_count"] += 1
         notify_discord(username, email)
         return render_template("success.html", username=username)
 
-    return render_template("invite.html", token=token, error=f"Erreur : {res.text}")
+    return render_template("invite.html", token=token, error=f"Erreur : {res.text}", avatars=get_gallery_avatars())
 
 @app.route("/admin/stats")
 @login_required
