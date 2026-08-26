@@ -1,72 +1,113 @@
-import os
-import uuid
-import requests
-from flask import Flask, request, jsonify, render_template_string
+import os, uuid, requests
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify, render_template, redirect, session
 from dotenv import load_dotenv
+from functools import wraps
 
 load_dotenv()
-
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "changeme")
 
 JELLYFIN_URL = os.getenv("JELLYFIN_URL")
 JELLYFIN_API_KEY = os.getenv("JELLYFIN_API_KEY")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
 invites = {}
 
-INVITE_FORM = """
-<!DOCTYPE html>
-<html>
-<head><title>Invitation Jellyfin</title></head>
-<body>
-<h2>Créer votre compte Jellyfin</h2>
-<form method="POST" action="/invite/{{ token }}">
-<input type="text" name="username" placeholder="Nom d'utilisateur" required><br><br>
-<input type="password" name="password" placeholder="Mot de passe" required><br><br>
-<button type="submit">Créer mon compte</button>
-</form>
-</body>
-</html>
-"""
-
 def jf_headers():
-    return {
-        "Authorization": f'MediaBrowser Token={JELLYFIN_API_KEY}',
-        "Content-Type": "application/json"
-    }
+    return {"Authorization": f'MediaBrowser Token={JELLYFIN_API_KEY}', "Content-Type": "application/json"}
 
-@app.route("/create-invite", methods=["POST"])
-def create_invite():
+def login_required(f):
+    @wraps(f)
+    def decorated(*a, **kw):
+        if not session.get("logged_in"):
+            return redirect("/admin/login")
+        return f(*a, **kw)
+    return decorated
+
+def notify_discord(username):
+    if not DISCORD_WEBHOOK:
+        return
+    requests.post(DISCORD_WEBHOOK, json={"content": f"🎬 Nouveau compte Jellyfin créé : **{username}**"})
+
+def apply_policy(user_id, expire_days=None):
+    policy = {
+        "EnableAllFolders": False,
+        "EnabledFolders": os.getenv("ALLOWED_LIBRARY_IDS", "").split(","),
+        "IsAdministrator": False,
+        "EnableRemoteAccess": True
+    }
+    requests.post(f"{JELLYFIN_URL}/Users/{user_id}/Policy", headers=jf_headers(), json=policy)
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        if request.form.get("password") == ADMIN_PASSWORD:
+            session["logged_in"] = True
+            return redirect("/admin")
+        return render_template("admin_login.html", error="Mot de passe incorrect")
+    return render_template("admin_login.html")
+
+@app.route("/admin")
+@login_required
+def admin():
+    return render_template("admin.html", invites=invites)
+
+@app.route("/admin/create", methods=["POST"])
+@login_required
+def admin_create():
     token = str(uuid.uuid4())[:8]
-    invites[token] = {"used": False}
-    return jsonify({"invite_url": f"/invite/{token}"})
+    duration_hours = int(request.form.get("duration_hours", 24))
+    max_uses = int(request.form.get("max_uses", 1))
+    expire_days = request.form.get("expire_days") or None
+
+    invites[token] = {
+        "used_count": 0,
+        "max_uses": max_uses,
+        "expires_at": datetime.now() + timedelta(hours=duration_hours),
+        "account_expire_days": int(expire_days) if expire_days else None
+    }
+    return redirect("/admin")
+
+def invite_valid(token):
+    inv = invites.get(token)
+    if not inv:
+        return False
+    if datetime.now() > inv["expires_at"]:
+        return False
+    if inv["used_count"] >= inv["max_uses"]:
+        return False
+    return True
 
 @app.route("/invite/<token>", methods=["GET"])
 def show_invite(token):
-    if token not in invites or invites[token]["used"]:
-        return "Lien invalide ou déjà utilisé.", 404
-    return render_template_string(INVITE_FORM, token=token)
+    if not invite_valid(token):
+        return render_template("invite.html", error="Lien invalide, expiré ou déjà utilisé.")
+    return render_template("invite.html", token=token)
 
 @app.route("/invite/<token>", methods=["POST"])
 def process_invite(token):
-    if token not in invites or invites[token]["used"]:
-        return "Lien invalide ou déjà utilisé.", 404
+    if not invite_valid(token):
+        return render_template("invite.html", error="Lien invalide, expiré ou déjà utilisé.")
 
     username = request.form.get("username")
     password = request.form.get("password")
 
-    res = requests.post(
-        f"{JELLYFIN_URL}/Users/New",
-        headers=jf_headers(),
-        json={"Name": username, "Password": password}
-    )
+    res = requests.post(f"{JELLYFIN_URL}/Users/New", headers=jf_headers(),
+                         json={"Name": username, "Password": password})
 
     if res.status_code == 200:
-        invites[token]["used"] = True
-        return "Compte créé avec succès ! Vous pouvez fermer cette page."
-    else:
-        return f"Erreur lors de la création : {res.text}", 500
+        user_id = res.json()["Id"]
+        inv = invites[token]
+        apply_policy(user_id, inv["account_expire_days"])
+        inv["used_count"] += 1
+        notify_discord(username)
+        return render_template("success.html", username=username)
 
-@app.route("/health", methods=["GET"])
+    return render_template("invite.html", token=token, error=f"Erreur : {res.text}")
+
+@app.route("/health")
 def health():
     return jsonify({"status": "ok"})
 
