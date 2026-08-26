@@ -30,9 +30,7 @@
 {% if stats.active_sessions %}
 <ul>
 {% for s in stats.active_sessions %}
-<li>
-<span>{{ s.user }} regarde <strong>{{ s.item }}</strong> ({{ s.device }})</span>
-</li>
+<li><span>{{ s.user }} regarde <strong>{{ s.item }}</strong> ({{ s.device }})</span></li>
 {% endfor %}
 </ul>
 {% else %}
@@ -44,15 +42,6 @@
 <ul>
 {% for lib in stats.libraries %}
 <li><span>{{ lib.name }}</span><span class="badge">{{ lib.count }} éléments</span></li>
-{% endfor %}
-</ul>
-{% endif %}
-
-{% if stats.playback_history %}
-<h3 style="font-size:1rem; margin-top:1.5rem;">🕒 Historique récent</h3>
-<ul>
-{% for h in stats.playback_history %}
-<li><span>{{ h[1] }}</span><span style="font-size:0.75rem; color:rgba(255,255,255,0.5);">{{ h[3] }}</span></li>
 {% endfor %}
 </ul>
 {% endif %}
