@@ -65,35 +65,39 @@ def set_avatar_from_bytes(user_id, image_bytes, content_type):
 def import_user_to_jellyseerr(jellyfin_user_id):
     try:
         res = requests.post(
-            f"{JELLYSEERR_URL}/api/v1/jellyfin/import-from-jellyfin",
+            f"{JELLYSEERR_URL}/api/v1/user/import-from-jellyfin",
             headers={"X-Api-Key": JELLYSEERR_API_KEY, "Content-Type": "application/json"},
             json={"jellyfinUserIds": [jellyfin_user_id]},
             timeout=8
         )
+        print(f"[SEERR IMPORT] status={res.status_code} body={res.text}")
         if res.status_code == 200:
             results = res.json()
             if isinstance(results, list) and results:
                 return results[0].get("id")
-    except requests.exceptions.RequestException:
-        pass
+    except requests.exceptions.RequestException as e:
+        print(f"[SEERR IMPORT ERROR] {e}")
     return None
 
 def set_jellyseerr_email(jellyseerr_user_id, email):
     try:
-        requests.put(
+        r1 = requests.put(
             f"{JELLYSEERR_URL}/api/v1/user/{jellyseerr_user_id}",
             headers={"X-Api-Key": JELLYSEERR_API_KEY, "Content-Type": "application/json"},
             json={"email": email},
             timeout=5
         )
-        requests.post(
+        print(f"[SEERR EMAIL] status={r1.status_code} body={r1.text}")
+
+        r2 = requests.post(
             f"{JELLYSEERR_URL}/api/v1/user/{jellyseerr_user_id}/settings/notifications",
             headers={"X-Api-Key": JELLYSEERR_API_KEY, "Content-Type": "application/json"},
             json={"notificationTypes": {"email": 1}},
             timeout=5
         )
-    except requests.exceptions.RequestException:
-        pass
+        print(f"[SEERR NOTIF] status={r2.status_code} body={r2.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"[SEERR EMAIL ERROR] {e}")
 
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
