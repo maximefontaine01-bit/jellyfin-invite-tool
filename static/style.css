@@ -1,0 +1,9 @@
+body { font-family: sans-serif; background: #1a1a2e; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+.card { background: #16213e; color: white; padding: 2rem; border-radius: 12px; width: 320px; text-align: center; }
+input, button { width: 100%; padding: 0.6rem; margin: 0.5rem 0; border-radius: 6px; border: none; }
+button { background: #0f9d58; color: white; cursor: pointer; }
+.error { color: #ff6b6b; }
+.badge { background: #0f9d58; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; }
+.badge.used { background: #666; }
+ul { list-style: none; padding: 0; text-align: left; }
+li { margin: 0.5rem 0; }
