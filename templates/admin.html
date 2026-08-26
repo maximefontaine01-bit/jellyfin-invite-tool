@@ -13,14 +13,36 @@
 <input type="number" name="expire_days" placeholder="Illimité si vide">
 <button type="submit">+ Générer une invitation</button>
 </form>
+
+{% if new_link %}
+<div id="new-link-box" style="margin-top:1rem; padding:0.7rem; background:rgba(15,157,88,0.15); border-radius:8px; font-size:0.85rem;">
+  ✅ Lien copié dans le presse-papier !
+</div>
+<script>
+  const link = "{{ new_link }}";
+  navigator.clipboard.writeText(link).catch(() => {
+    document.getElementById('new-link-box').innerText = "Lien généré : " + link;
+  });
+</script>
+{% endif %}
+
 <ul>
 {% for token, data in invites.items() %}
 <li>
-<code>/invite/{{ token }}</code>
+<code id="code-{{ token }}">/invite/{{ token }}</code>
+<button onclick="copyLink('{{ token }}', '{{ request.host_url }}invite/{{ token }}')" style="width:auto; padding:0.3rem 0.6rem; margin:0; font-size:0.75rem;">📋</button>
 {% if data.used_count >= data.max_uses %}<span class="badge used">Épuisé</span>{% else %}<span class="badge">Actif</span>{% endif %}
 </li>
 {% endfor %}
 </ul>
 </div>
+
+<script>
+function copyLink(token, fullUrl) {
+  navigator.clipboard.writeText(fullUrl).then(() => {
+    alert("Lien copié : " + fullUrl);
+  });
+}
+</script>
 </body>
 </html>
