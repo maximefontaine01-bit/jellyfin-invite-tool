@@ -4,6 +4,7 @@
 <body>
 <div class="card">
 <h2>🎬 Gestion des invitations</h2>
+
 <form method="POST" action="/admin/create">
 <label>Durée de validité du lien (heures)</label>
 <input type="number" name="duration_hours" value="24">
@@ -34,6 +35,12 @@
 </li>
 {% endfor %}
 </ul>
+
+<div style="margin-top:1.5rem; display:flex; flex-direction:column; gap:0.5rem;">
+  <a href="/admin/stats" style="color:#8ab4f8; font-size:0.9rem; text-decoration:none;">📊 Voir les statistiques</a>
+  <a href="/admin/logout" style="color:rgba(255,255,255,0.5); font-size:0.8rem; text-decoration:none;">Se déconnecter</a>
+</div>
+
 </div>
 
 <script>
