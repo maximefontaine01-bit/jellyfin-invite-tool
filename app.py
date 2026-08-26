@@ -12,6 +12,8 @@ JELLYFIN_URL = os.getenv("JELLYFIN_URL")
 JELLYFIN_API_KEY = os.getenv("JELLYFIN_API_KEY")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+JELLYSEERR_URL = os.getenv("JELLYSEERR_URL")
+JELLYSEERR_API_KEY = os.getenv("JELLYSEERR_API_KEY")
 
 invites = {}
 
@@ -59,6 +61,11 @@ def admin_login():
             return redirect("/admin")
         return render_template("admin_login.html", error="Mot de passe incorrect")
     return render_template("admin_login.html")
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("logged_in", None)
+    return redirect("/admin/login")
 
 @app.route("/admin")
 @login_required
@@ -126,6 +133,78 @@ def process_invite(token):
         return render_template("success.html", username=username)
 
     return render_template("invite.html", token=token, error=f"Erreur : {res.text}")
+
+@app.route("/admin/stats")
+@login_required
+def admin_stats():
+    stats = {
+        "jellyfin_users": None,
+        "active_sessions": [],
+        "libraries": [],
+        "playback_history": [],
+        "jellyseerr": None,
+        "jellyseerr_error": None,
+        "jellyfin_error": None
+    }
+
+    try:
+        users_res = requests.get(f"{JELLYFIN_URL}/Users", headers=jf_headers(), timeout=5)
+        stats["jellyfin_users"] = len(users_res.json())
+
+        sessions_res = requests.get(f"{JELLYFIN_URL}/Sessions", headers=jf_headers(), timeout=5)
+        sessions = sessions_res.json()
+        stats["active_sessions"] = [
+            {
+                "user": s.get("UserName", "Inconnu"),
+                "item": s.get("NowPlayingItem", {}).get("Name") if s.get("NowPlayingItem") else None,
+                "device": s.get("DeviceName", ""),
+                "client": s.get("Client", "")
+            }
+            for s in sessions if s.get("NowPlayingItem")
+        ]
+
+        libs_res = requests.get(f"{JELLYFIN_URL}/Library/MediaFolders", headers=jf_headers(), timeout=5)
+        libs = libs_res.json().get("Items", [])
+        for lib in libs:
+            count_res = requests.get(
+                f"{JELLYFIN_URL}/Items",
+                headers=jf_headers(),
+                params={"ParentId": lib["Id"], "Recursive": "true", "IncludeItemTypes": "Movie,Series"},
+                timeout=5
+            )
+            total = count_res.json().get("TotalRecordCount", 0)
+            stats["libraries"].append({"name": lib["Name"], "count": total})
+
+        try:
+            pr_res = requests.post(
+                f"{JELLYFIN_URL}/user_usage_stats/submit_custom_query",
+                headers=jf_headers(),
+                json={
+                    "CustomQueryString": "SELECT UserId, ItemName, PlayDuration, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10",
+                    "ReplaceUserId": True
+                },
+                timeout=5
+            )
+            if pr_res.status_code == 200:
+                stats["playback_history"] = pr_res.json().get("results", [])
+        except requests.exceptions.RequestException:
+            pass
+
+    except requests.exceptions.RequestException as e:
+        stats["jellyfin_error"] = str(e)
+
+    if JELLYSEERR_URL and JELLYSEERR_API_KEY:
+        try:
+            js_res = requests.get(
+                f"{JELLYSEERR_URL}/api/v1/request/count",
+                headers={"X-Api-Key": JELLYSEERR_API_KEY},
+                timeout=5
+            )
+            stats["jellyseerr"] = js_res.json()
+        except requests.exceptions.RequestException as e:
+            stats["jellyseerr_error"] = str(e)
+
+    return render_template("stats.html", stats=stats)
 
 @app.route("/health")
 def health():
