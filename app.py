@@ -28,10 +28,16 @@ def login_required(f):
         return f(*a, **kw)
     return decorated
 
-def notify_discord(username):
+def notify_discord(username, email=None):
     if not DISCORD_WEBHOOK:
         return
-    requests.post(DISCORD_WEBHOOK, json={"content": f"🎬 Nouveau compte Jellyfin créé : **{username}**"})
+    msg = f"🎬 Nouveau compte Jellyfin créé : **{username}**"
+    if email:
+        msg += f" ({email})"
+    try:
+        requests.post(DISCORD_WEBHOOK, json={"content": msg}, timeout=5)
+    except requests.exceptions.RequestException:
+        pass
 
 def apply_policy(user_id, expire_days=None):
     policy = {
@@ -40,16 +46,52 @@ def apply_policy(user_id, expire_days=None):
         "IsAdministrator": False,
         "EnableRemoteAccess": True
     }
-    requests.post(f"{JELLYFIN_URL}/Users/{user_id}/Policy", headers=jf_headers(), json=policy)
+    try:
+        requests.post(f"{JELLYFIN_URL}/Users/{user_id}/Policy", headers=jf_headers(), json=policy, timeout=5)
+    except requests.exceptions.RequestException:
+        pass
 
-def set_avatar(user_id, image_bytes, content_type):
+def set_avatar_from_bytes(user_id, image_bytes, content_type):
     headers = {
         "Authorization": f'MediaBrowser Token={JELLYFIN_API_KEY}',
         "Content-Type": content_type
     }
     b64_data = base64.b64encode(image_bytes)
     try:
-        requests.post(f"{JELLYFIN_URL}/Users/{user_id}/Images/Primary", headers=headers, data=b64_data)
+        requests.post(f"{JELLYFIN_URL}/Users/{user_id}/Images/Primary", headers=headers, data=b64_data, timeout=8)
+    except requests.exceptions.RequestException:
+        pass
+
+def import_user_to_jellyseerr(jellyfin_user_id):
+    try:
+        res = requests.post(
+            f"{JELLYSEERR_URL}/api/v1/jellyfin/import-from-jellyfin",
+            headers={"X-Api-Key": JELLYSEERR_API_KEY, "Content-Type": "application/json"},
+            json={"jellyfinUserIds": [jellyfin_user_id]},
+            timeout=8
+        )
+        if res.status_code == 200:
+            results = res.json()
+            if isinstance(results, list) and results:
+                return results[0].get("id")
+    except requests.exceptions.RequestException:
+        pass
+    return None
+
+def set_jellyseerr_email(jellyseerr_user_id, email):
+    try:
+        requests.put(
+            f"{JELLYSEERR_URL}/api/v1/user/{jellyseerr_user_id}",
+            headers={"X-Api-Key": JELLYSEERR_API_KEY, "Content-Type": "application/json"},
+            json={"email": email},
+            timeout=5
+        )
+        requests.post(
+            f"{JELLYSEERR_URL}/api/v1/user/{jellyseerr_user_id}/settings/notifications",
+            headers={"X-Api-Key": JELLYSEERR_API_KEY, "Content-Type": "application/json"},
+            json={"notificationTypes": {"email": 1}},
+            timeout=5
+        )
     except requests.exceptions.RequestException:
         pass
 
@@ -113,6 +155,7 @@ def process_invite(token):
 
     username = request.form.get("username")
     password = request.form.get("password")
+    email = request.form.get("email", "").strip()
 
     res = requests.post(f"{JELLYFIN_URL}/Users/New", headers=jf_headers(),
                          json={"Name": username, "Password": password})
@@ -126,10 +169,15 @@ def process_invite(token):
         if avatar_file and avatar_file.filename:
             image_bytes = avatar_file.read()
             content_type = avatar_file.content_type or "image/png"
-            set_avatar(user_id, image_bytes, content_type)
+            set_avatar_from_bytes(user_id, image_bytes, content_type)
+
+        if email and JELLYSEERR_URL and JELLYSEERR_API_KEY:
+            jellyseerr_id = import_user_to_jellyseerr(user_id)
+            if jellyseerr_id:
+                set_jellyseerr_email(jellyseerr_id, email)
 
         inv["used_count"] += 1
-        notify_discord(username)
+        notify_discord(username, email)
         return render_template("success.html", username=username)
 
     return render_template("invite.html", token=token, error=f"Erreur : {res.text}")
@@ -138,15 +186,9 @@ def process_invite(token):
 @login_required
 def admin_stats():
     stats = {
-        "jellyfin_users": None,
-        "active_sessions": [],
-        "libraries": [],
-        "playback_history": [],
-        "jellyseerr": None,
-        "jellyseerr_error": None,
-        "jellyfin_error": None
+        "jellyfin_users": None, "active_sessions": [], "libraries": [],
+        "jellyseerr": None, "jellyseerr_error": None, "jellyfin_error": None
     }
-
     try:
         users_res = requests.get(f"{JELLYFIN_URL}/Users", headers=jf_headers(), timeout=5)
         stats["jellyfin_users"] = len(users_res.json())
@@ -154,52 +196,25 @@ def admin_stats():
         sessions_res = requests.get(f"{JELLYFIN_URL}/Sessions", headers=jf_headers(), timeout=5)
         sessions = sessions_res.json()
         stats["active_sessions"] = [
-            {
-                "user": s.get("UserName", "Inconnu"),
-                "item": s.get("NowPlayingItem", {}).get("Name") if s.get("NowPlayingItem") else None,
-                "device": s.get("DeviceName", ""),
-                "client": s.get("Client", "")
-            }
+            {"user": s.get("UserName", "Inconnu"),
+             "item": s.get("NowPlayingItem", {}).get("Name") if s.get("NowPlayingItem") else None,
+             "device": s.get("DeviceName", ""), "client": s.get("Client", "")}
             for s in sessions if s.get("NowPlayingItem")
         ]
 
         libs_res = requests.get(f"{JELLYFIN_URL}/Library/MediaFolders", headers=jf_headers(), timeout=5)
         libs = libs_res.json().get("Items", [])
         for lib in libs:
-            count_res = requests.get(
-                f"{JELLYFIN_URL}/Items",
-                headers=jf_headers(),
-                params={"ParentId": lib["Id"], "Recursive": "true", "IncludeItemTypes": "Movie,Series"},
-                timeout=5
-            )
-            total = count_res.json().get("TotalRecordCount", 0)
-            stats["libraries"].append({"name": lib["Name"], "count": total})
-
-        try:
-            pr_res = requests.post(
-                f"{JELLYFIN_URL}/user_usage_stats/submit_custom_query",
-                headers=jf_headers(),
-                json={
-                    "CustomQueryString": "SELECT UserId, ItemName, PlayDuration, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10",
-                    "ReplaceUserId": True
-                },
-                timeout=5
-            )
-            if pr_res.status_code == 200:
-                stats["playback_history"] = pr_res.json().get("results", [])
-        except requests.exceptions.RequestException:
-            pass
-
+            count_res = requests.get(f"{JELLYFIN_URL}/Items", headers=jf_headers(),
+                params={"ParentId": lib["Id"], "Recursive": "true", "IncludeItemTypes": "Movie,Series"}, timeout=5)
+            stats["libraries"].append({"name": lib["Name"], "count": count_res.json().get("TotalRecordCount", 0)})
     except requests.exceptions.RequestException as e:
         stats["jellyfin_error"] = str(e)
 
     if JELLYSEERR_URL and JELLYSEERR_API_KEY:
         try:
-            js_res = requests.get(
-                f"{JELLYSEERR_URL}/api/v1/request/count",
-                headers={"X-Api-Key": JELLYSEERR_API_KEY},
-                timeout=5
-            )
+            js_res = requests.get(f"{JELLYSEERR_URL}/api/v1/request/count",
+                headers={"X-Api-Key": JELLYSEERR_API_KEY}, timeout=5)
             stats["jellyseerr"] = js_res.json()
         except requests.exceptions.RequestException as e:
             stats["jellyseerr_error"] = str(e)
