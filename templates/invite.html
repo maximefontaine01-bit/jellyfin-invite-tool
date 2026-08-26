@@ -6,9 +6,11 @@
 <h2>Créer votre compte Jellyfin</h2>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if token %}
-<form method="POST">
+<form method="POST" enctype="multipart/form-data">
 <input type="text" name="username" placeholder="Nom d'utilisateur" required>
 <input type="password" name="password" placeholder="Mot de passe" required>
+<label style="text-align:left; display:block; font-size:0.85rem; color:rgba(255,255,255,0.7); margin:0.8rem 0 0.3rem;">Avatar (optionnel)</label>
+<input type="file" name="avatar" accept="image/png, image/jpeg">
 <button type="submit">Créer mon compte</button>
 </form>
 {% endif %}
