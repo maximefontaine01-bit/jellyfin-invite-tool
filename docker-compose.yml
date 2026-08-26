@@ -1,0 +1,15 @@
+services:
+  jellyfin-invite:
+    build: .
+    container_name: jellyfin-invite
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    networks:
+      - proxy_network
+
+networks:
+  proxy_network:
+    external: true
