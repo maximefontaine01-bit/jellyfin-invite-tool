@@ -3,7 +3,7 @@
 <head><title>Admin - Invitations Jellyfin</title><link rel="stylesheet" href="/static/style.css"></head>
 <body>
 <div class="card">
-<h2>Gestion des invitations</h2>
+<h2>🎬 Gestion des invitations</h2>
 <form method="POST" action="/admin/create">
 <label>Durée de validité du lien (heures)</label>
 <input type="number" name="duration_hours" value="24">
@@ -17,7 +17,6 @@
 {% for token, data in invites.items() %}
 <li>
 <code>/invite/{{ token }}</code>
-— {{ data.used_count }}/{{ data.max_uses }} utilisé(s)
 {% if data.used_count >= data.max_uses %}<span class="badge used">Épuisé</span>{% else %}<span class="badge">Actif</span>{% endif %}
 </li>
 {% endfor %}
