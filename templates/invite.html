@@ -6,15 +6,36 @@
 <h2>Créer votre compte Jellyfin</h2>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 {% if token %}
-<form method="POST" enctype="multipart/form-data">
+<form method="POST">
 <input type="text" name="username" placeholder="Nom d'utilisateur" required>
-<input type="email" name="email" placeholder="Adresse e-mail (notifications Seerr)" required>
+<input type="email" name="email" placeholder="Adresse e-mail" required>
 <input type="password" name="password" placeholder="Mot de passe" required>
-<label style="text-align:left; display:block; font-size:0.85rem; color:rgba(200,210,255,0.7); margin:1rem 0 0.3rem;">Avatar (optionnel)</label>
-<input type="file" name="avatar" accept="image/png, image/jpeg">
+
+<label style="text-align:left; display:block; font-size:0.85rem; color:rgba(200,210,255,0.7); margin:1rem 0 0.5rem;">Choisissez un avatar</label>
+
+<input type="hidden" name="selected_avatar" id="selected_avatar" value="">
+
+<div style="display:flex; gap:0.6rem; overflow-x:auto; padding:0.5rem 0;">
+{% for avatar in avatars %}
+<img
+  src="/static/avatars/{{ avatar }}"
+  onclick="selectAvatar('{{ avatar }}', this)"
+  style="width:64px; height:64px; border-radius:50%; object-fit:cover; cursor:pointer; border:2px solid transparent; flex-shrink:0; transition:border 0.2s ease;"
+>
+{% endfor %}
+</div>
+
 <button type="submit">Créer mon compte</button>
 </form>
 {% endif %}
 </div>
+
+<script>
+function selectAvatar(filename, imgEl) {
+  document.getElementById('selected_avatar').value = filename;
+  document.querySelectorAll('img').forEach(img => img.style.border = '2px solid transparent');
+  imgEl.style.border = '2px solid #a78bfa';
+}
+</script>
 </body>
 </html>
