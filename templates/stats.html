@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head><title>Statistiques</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<div class="card" style="width:600px; max-height:85vh; overflow-y:auto;">
+<h2>📊 Statistiques</h2>
+
+<div style="display:flex; gap:0.7rem; margin-bottom:1.2rem; flex-wrap:wrap;">
+  <div style="flex:1; min-width:120px; background:rgba(255,255,255,0.06); border-radius:10px; padding:0.8rem; text-align:center;">
+    <div style="font-size:1.6rem; font-weight:700;">{{ stats.jellyfin_users if stats.jellyfin_users is not none else '—' }}</div>
+    <div style="font-size:0.75rem; color:rgba(255,255,255,0.6);">Utilisateurs Jellyfin</div>
+  </div>
+  <div style="flex:1; min-width:120px; background:rgba(255,255,255,0.06); border-radius:10px; padding:0.8rem; text-align:center;">
+    <div style="font-size:1.6rem; font-weight:700;">{{ stats.active_sessions|length }}</div>
+    <div style="font-size:0.75rem; color:rgba(255,255,255,0.6);">Streams en cours</div>
+  </div>
+  {% if stats.jellyseerr %}
+  <div style="flex:1; min-width:120px; background:rgba(255,255,255,0.06); border-radius:10px; padding:0.8rem; text-align:center;">
+    <div style="font-size:1.6rem; font-weight:700;">{{ stats.jellyseerr.pending }}</div>
+    <div style="font-size:0.75rem; color:rgba(255,255,255,0.6);">Demandes en attente</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if stats.jellyfin_error %}
+<p class="error">Erreur Jellyfin : {{ stats.jellyfin_error }}</p>
+{% endif %}
+
+<h3 style="font-size:1rem; margin-top:1.5rem;">🎬 En cours de lecture</h3>
+{% if stats.active_sessions %}
+<ul>
+{% for s in stats.active_sessions %}
+<li>
+<span>{{ s.user }} regarde <strong>{{ s.item }}</strong> ({{ s.device }})</span>
+</li>
+{% endfor %}
+</ul>
+{% else %}
+<p style="font-size:0.85rem; color:rgba(255,255,255,0.5);">Aucun stream actif.</p>
+{% endif %}
+
+<h3 style="font-size:1rem; margin-top:1.5rem;">📚 Bibliothèques</h3>
+{% if stats.libraries %}
+<ul>
+{% for lib in stats.libraries %}
+<li><span>{{ lib.name }}</span><span class="badge">{{ lib.count }} éléments</span></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if stats.playback_history %}
+<h3 style="font-size:1rem; margin-top:1.5rem;">🕒 Historique récent</h3>
+<ul>
+{% for h in stats.playback_history %}
+<li><span>{{ h[1] }}</span><span style="font-size:0.75rem; color:rgba(255,255,255,0.5);">{{ h[3] }}</span></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if stats.jellyseerr %}
+<h3 style="font-size:1rem; margin-top:1.5rem;">📥 Demandes Jellyseerr</h3>
+<ul>
+<li><span>Total</span><span class="badge">{{ stats.jellyseerr.total }}</span></li>
+<li><span>En attente</span><span class="badge used">{{ stats.jellyseerr.pending }}</span></li>
+<li><span>Approuvées</span><span class="badge">{{ stats.jellyseerr.approved }}</span></li>
+<li><span>Disponibles</span><span class="badge">{{ stats.jellyseerr.available }}</span></li>
+</ul>
+{% elif stats.jellyseerr_error %}
+<p class="error">Erreur Jellyseerr : {{ stats.jellyseerr_error }}</p>
+{% else %}
+<p style="font-size:0.85rem; color:rgba(255,255,255,0.5);">Jellyseerr non configuré.</p>
+{% endif %}
+
+<a href="/admin" style="display:block; margin-top:1.5rem; font-size:0.85rem; color:rgba(255,255,255,0.6);">← Retour</a>
+</div>
+</body>
+</html>
