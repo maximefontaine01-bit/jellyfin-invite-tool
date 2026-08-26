@@ -19,9 +19,8 @@
   ✅ Lien copié dans le presse-papier !
 </div>
 <script>
-  const link = "{{ new_link }}";
-  navigator.clipboard.writeText(link).catch(() => {
-    document.getElementById('new-link-box').innerText = "Lien généré : " + link;
+  navigator.clipboard.writeText("{{ new_link }}").catch(() => {
+    document.getElementById('new-link-box').innerText = "Lien généré : {{ new_link }}";
   });
 </script>
 {% endif %}
@@ -30,7 +29,7 @@
 {% for token, data in invites.items() %}
 <li>
 <code id="code-{{ token }}">/invite/{{ token }}</code>
-<button onclick="copyLink('{{ token }}', '{{ request.host_url }}invite/{{ token }}')" style="width:auto; padding:0.3rem 0.6rem; margin:0; font-size:0.75rem;">📋</button>
+<button onclick="copyLink('{{ request.host_url }}invite/{{ token }}')" style="width:auto; padding:0.3rem 0.6rem; margin:0; font-size:0.75rem;">📋</button>
 {% if data.used_count >= data.max_uses %}<span class="badge used">Épuisé</span>{% else %}<span class="badge">Actif</span>{% endif %}
 </li>
 {% endfor %}
@@ -38,7 +37,7 @@
 </div>
 
 <script>
-function copyLink(token, fullUrl) {
+function copyLink(fullUrl) {
   navigator.clipboard.writeText(fullUrl).then(() => {
     alert("Lien copié : " + fullUrl);
   });
